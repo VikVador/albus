@@ -46,7 +46,12 @@ def mean_square_error(
     Example:
         >>> x = torch.randn(7, 4, 2, 128, 256)  # (T, N, C, Y, X)
         >>> y = torch.randn(7, 4, 2, 128, 256)  # (T, N, C, Y, X)
-        >>> mean_square_error(x, y, dims="T N C Y X", reduce="N Y X").shape
+        >>> mean_square_error(
+        ...     x=x,
+        ...     y=y,
+        ...     dims="T N C Y X",
+        ...     reduce="N Y X",
+        ... ).shape
         torch.Size([7, 2])
     """
     ax   = axes(dims, reduce)
@@ -80,7 +85,12 @@ def root_mean_square_error(
     Example:
         >>> x = torch.randn(7, 4, 2, 128, 256)  # (T, N, C, Y, X)
         >>> y = torch.randn(7, 4, 2, 128, 256)  # (T, N, C, Y, X)
-        >>> root_mean_square_error(x, y, dims="T N C Y X", reduce="N Y X").shape
+        >>> root_mean_square_error(
+        ...     x=x,
+        ...     y=y,
+        ...     dims="T N C Y X",
+        ...     reduce="N Y X",
+        ... ).shape
         torch.Size([7, 2])
     """
     return mean_square_error(x, y, dims, reduce, mask).sqrt()
@@ -108,7 +118,11 @@ def standard_deviation(
 
     Example:
         >>> x = torch.randn(7, 4, 2, 128, 256)  # (T, N, C, Y, X)
-        >>> standard_deviation(x, dims="T N C Y X", reduce="N Y X").shape
+        >>> standard_deviation(
+        ...     x=x,
+        ...     dims="T N C Y X",
+        ...     reduce="N Y X",
+        ... ).shape
         torch.Size([7, 2])
     """
     ax       = axes(dims, reduce)
@@ -146,7 +160,13 @@ def skill(
     Example:
         >>> x = torch.randn(7, 2, 128, 256)     # (T, C, Y, X)
         >>> y = torch.randn(7, 4, 2, 128, 256)  # (T, N, C, Y, X)
-        >>> skill(x, y, dims="T N C Y X", ensemble="N", reduce="Y X").shape
+        >>> skill(
+        ...     x=x,
+        ...     y=y,
+        ...     dims="T N C Y X",
+        ...     ensemble="N",
+        ...     reduce="Y X",
+        ... ).shape
         torch.Size([7, 2])
     """
     n_axis = axes(dims, ensemble)[0]
@@ -178,8 +198,13 @@ def spread(
         Ensemble spread, with the axes in `reduce` collapsed.
 
     Example:
-        >>> y = torch.randn(7, 4, 2, 128, 256)  # (T, N, C, Y, X)
-        >>> spread(y, dims="T N C Y X", ensemble="N", reduce="Y X").shape
+        >>> x = torch.randn(7, 4, 2, 128, 256)  # (T, N, C, Y, X)
+        >>> spread(
+        ...     x=x,
+        ...     dims="T N C Y X",
+        ...     ensemble="N",
+        ...     reduce="Y X",
+        ... ).shape
         torch.Size([7, 2])
     """
     n_axis       = axes(dims, ensemble)[0]
@@ -221,7 +246,13 @@ def spread_skill_ratio(
     Example:
         >>> x = torch.randn(7, 2, 128, 256)     # (T, C, Y, X)
         >>> y = torch.randn(7, 4, 2, 128, 256)  # (T, N, C, Y, X)
-        >>> skll, sprd, ratio = spread_skill_ratio(x, y, dims="T N C Y X", ensemble="N", reduce="Y X")
+        >>> skll, sprd, ratio = spread_skill_ratio(
+        ...     x=x,
+        ...     y=y,
+        ...     dims="T N C Y X",
+        ...     ensemble="N",
+        ...     reduce="Y X",
+        ... )
         >>> ratio.shape
         torch.Size([7, 2])
     """
@@ -261,7 +292,13 @@ def continuous_ranked_probability_score(
     Example:
         >>> x = torch.randn(7, 2, 128, 256)     # (T, C, Y, X)
         >>> y = torch.randn(7, 4, 2, 128, 256)  # (T, N, C, Y, X)
-        >>> continuous_ranked_probability_score(x, y, dims="T N C Y X", ensemble="N", reduce="Y X").shape
+        >>> continuous_ranked_probability_score(
+        ...     x=x,
+        ...     y=y,
+        ...     dims="T N C Y X",
+        ...     ensemble="N",
+        ...     reduce="Y X",
+        ... ).shape
         torch.Size([7, 2])
     """
     n_axis             = axes(dims, ensemble)[0]
@@ -288,10 +325,6 @@ def power_spectrum(
 ) -> Tensor:
     r"""Compute the isotropic 2D power spectrum of a real field, along two spatial axes.
 
-    The mean over valid (non-masked) pixels is subtracted before masked-out entries are
-    zero-filled, to limit spectral leakage from the mask boundary on fields with a large
-    nonzero mean (e.g. raw physical quantities, as opposed to standardized anomalies).
-
     Formula:
         P(k) = 𝔼_{‖κ‖ = k}[ |F(x)(κ)|² ]
 
@@ -308,13 +341,18 @@ def power_spectrum(
 
     Example:
         >>> x = torch.randn(7, 2, 128, 256)  # (T, C, Y, X)
-        >>> power_spectrum(x, dims="T C Y X", spatial="Y X").shape
+        >>> power_spectrum(
+        ...     x=x,
+        ...     dims="T C Y X",
+        ...     spatial="Y X",
+        ... ).shape
         torch.Size([7, 2, 65])
     """
     y_axis, x_axis = axes(dims, spatial)
     x              = x.movedim((y_axis, x_axis), (-2, -1))
     ny, nx         = x.shape[-2], x.shape[-1]
 
+    # Used to avoid spectral leakage from non-periodic boundaries
     mean = apply_mask(x, mask).nanmean(dim=(-2, -1), keepdim=True)
     x    = apply_mask(x - mean, mask, value=0.0).nan_to_num(0.0)
 
@@ -339,4 +377,3 @@ def power_spectrum(
     spectrum = spectrum / count
 
     return spectrum
-# fmt: on

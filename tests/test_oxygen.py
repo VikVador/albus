@@ -1,3 +1,5 @@
+r"""Tests for albus.ocean.oxygen."""
+
 import torch
 
 from albus.ocean.oxygen import hypoxia

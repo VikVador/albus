@@ -1,3 +1,5 @@
+r"""Tests for albus.tools."""
+
 import torch
 
 from albus.tools import *

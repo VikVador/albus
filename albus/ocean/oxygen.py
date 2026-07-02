@@ -33,34 +33,34 @@ def hypoxia(
 ) -> dict[str, Tensor]:
     r"""Compute classification metrics for a hypoxia (oxygen < threshold) detection problem.
 
-    A pixel is hypoxic when its oxygen concentration falls below the relevant threshold.
-    Comparing the ground truth and predicted hypoxia masks turns the problem into a binary
-    classification task, scored with accuracy, balanced accuracy, F1, precision and recall.
-    If `thresholds_curve` is given, the ROC and precision-recall curves (and their area under
-    the curve) are additionally computed by sweeping that list of thresholds over `y` only.
-    The area under each curve is a trapezoidal estimate over `thresholds_curve` alone: it only
-    approaches the usual [0, 1]-normalized AUC if `thresholds_curve` spans the full data range.
-
     Arguments:
-        x                : Ground truth oxygen tensor, broadcastable to the shape of `y` (e.g. missing an
-                           ensemble axis that `y` has, with a size-1 placeholder at the same position).
-        y                : Predicted oxygen tensor, of shape `dims`.
-        dims             : Space-separated axis names describing the shape of `y`, e.g. "T C Y X".
-        reduce           : Space-separated subset of `dims` to flatten and score jointly, e.g. "Y X".
+        x                : Ground truth tensor, broadcastable with `y`.
+        y                : Predicted tensor.
+        dims             : Space-separated axis names describing the shape of `y`, e.g. "T N C Y X".
+        reduce           : Space-separated subset of `dims` to flatten and score jointly, e.g. "N Y X".
         thresholds       : [x_threshold, y_threshold], applied to `x` and `y` respectively.
         thresholds_curve : Thresholds swept over `y` to build the ROC/precision-recall curves.
         mask             : Boolean-like tensor, broadcastable with `x`, zero where entries are invalid.
 
     Returns:
-        accuracy          : Accuracy score, with the axes in `reduce` collapsed.
-        balanced_accuracy : Balanced accuracy score, with the axes in `reduce` collapsed.
-        f1                : F1 score, with the axes in `reduce` collapsed.
-        precision         : Precision score, with the axes in `reduce` collapsed.
-        recall            : Recall score, with the axes in `reduce` collapsed.
-        roc_fpr, roc_tpr  : ROC curve, of shape (len(thresholds_curve), *kept). Only if `thresholds_curve`.
-        roc_auc           : Area under the ROC curve, with the axes in `reduce` collapsed. Only if `thresholds_curve`.
-        pr_precision, pr_recall : Precision-recall curve, of shape (len(thresholds_curve), *kept). Only if `thresholds_curve`.
-        pr_auc            : Area under the precision-recall curve, with the axes in `reduce` collapsed. Only if `thresholds_curve`.
+        A dict of tensors, each with the axes in `reduce` collapsed:
+        - `accuracy`, `balanced_accuracy`, `f1`, `precision`, `recall`.
+        - if `thresholds_curve` is given: `roc_fpr`, `roc_tpr`, `roc_auc`,
+          `pr_precision`, `pr_recall`, `pr_auc` (the curves stacked along a
+          leading axis of size `len(thresholds_curve)`).
+
+    Example:
+        >>> x = torch.rand(7, 1, 2, 128, 256) * 400  # (T, N, C, Y, X)
+        >>> y = torch.rand(7, 4, 2, 128, 256) * 400  # (T, N, C, Y, X)
+        >>> out = hypoxia(
+        ...     x=x,
+        ...     y=y,
+        ...     dims="T N C Y X",
+        ...     reduce="N Y X",
+        ...     thresholds=[63.0, 63.0],
+        ... )
+        >>> out["accuracy"].shape
+        torch.Size([7, 2])
     """
     x_threshold, y_threshold = thresholds
     reduce_axes              = axes(dims, reduce)
@@ -145,4 +145,3 @@ def hypoxia(
             "pr_auc":       pr_auc.reshape(kept_shape),
         }
     return out
-# fmt: on
