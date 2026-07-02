@@ -7,7 +7,7 @@
 <p align="center"><b>T U T O R I A L</b></p>
 <hr style="color:#808080;">
 
-A self-contained tutorial is available as a Jupyter notebook. It walks through several metrics on a sample dataset consisting of a 7-day, 4-member forecast of oxygen in the Black Sea, at the surface and at 9 m depth, along with the corresponding ground truth trajectory.
+A self-contained tutorial is available as a Jupyter notebook. It loads a sample dataset (a 7-day, 4-member forecast of oxygen in the Black Sea, at the surface and at 9 m depth, along with the corresponding ground truth), then demonstrates every metric in the library.
 
 ➜ [`notebook/demo.ipynb`](notebook/demo.ipynb)
 
