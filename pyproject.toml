@@ -1,0 +1,50 @@
+[project]
+name = "albus"
+version = "0.0.1"
+description = "A library of metrics for evaluating learned models of physical systems."
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+
+dependencies = [
+  "scikit-learn==1.5.2",
+  "torch==2.5.1",
+  "tqdm==4.66.5",
+]
+
+[project.optional-dependencies]
+all = [
+  "ipykernel==6.29.5",
+  "jupyterlab==4.2.2",
+  "matplotlib==3.9.0",
+  "pre-commit==3.7.1",
+  "pytest==8.2.2",
+  "ruff==0.4.8",
+]
+
+[tool.ruff]
+line-length = 99
+exclude = ["notebooks/"]
+
+[tool.ruff.lint]
+extend-select = ["ANN", "B", "I", "UP", "W"]
+ignore = ["ANN002", "ANN003", "ANN401", "E731", "E741"]
+preview = true
+
+[tool.ruff.lint.extend-per-file-ignores]
+"__init__.py" = ["F401", "F403"]
+"test_*.py" = ["F403", "F405"]
+
+[tool.ruff.lint.isort]
+lines-between-types = 1
+relative-imports-order = "closest-to-furthest"
+section-order = ["future", "third-party", "first-party", "local-folder"]
+
+[tool.ruff.format]
+preview = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.setuptools.packages.find]
+include = ["albus*"]
