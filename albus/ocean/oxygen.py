@@ -145,3 +145,151 @@ def hypoxia(
             "pr_auc":       pr_auc.reshape(kept_shape),
         }
     return out
+
+
+def vertically_averaged_oxygen(
+        oxygen_data: Tensor,
+        measured_depths: Tensor,
+        mask: Tensor | None = None
+) -> Tensor:
+
+    """Compute the vertically averaged oxygen concentration.
+    Input:
+        oxygen_data: Tensor of shape (dep, lat, lon) representing oxygen concentration at different depths.
+        measured_depths: Tensor of shape (dep,) representing the depths of oxygen data.
+
+    Output:
+        Tensor of shape (lat, lon) representing the vertically averaged oxygen concentration.
+
+    """
+
+    # compute the thickness of each layer
+    layer_thickness = torch.diff(measured_depths, dim=0, prepend=torch.tensor([0.0], device=measured_depths.device))
+
+    # compute the weighted average of oxygen concentration
+    weighted_oxygen = oxygen_data[mask] * layer_thickness[:, None, None]
+    vertically_averaged_oxygen = torch.sum(weighted_oxygen, dim=0)
+
+    return vertically_averaged_oxygen
+
+
+def thickness_bottom_hypoxia(
+        oxygen_data: Tensor,
+        measured_depths: Tensor,
+        mask: Tensor | None = None,
+        threshold: float = 63.0
+) -> Tensor:
+    """Compute the thickness of the bottom hypoxic layer.
+    Input:
+        oxygen_data: Tensor of shape (dep, lat, lon) representing oxygen concentration at different depths.
+        measured_depths: Tensor of shape (dep,) representing the depths of oxygen data.
+        threshold: Oxygen concentration threshold for hypoxia (default is 63.0).
+
+    Output:
+        Tensor of shape (lat, lon) representing the thickness of the bottom hypoxic layer.
+
+    """
+    ### check this function, it is not correct, it should be the thickness of the BOTTOM hypoxic layer, not the total thickness of hypoxic layers
+
+    # Create a mask for hypoxic layers
+    hypoxic_mask = oxygen_data < threshold
+
+    general_mask = torch.ones_like(oxygen_data, dtype=torch.bool, device=oxygen_data.device)
+    if mask is not None:
+        general_mask = general_mask & mask
+
+    # Compute the thickness of each layer
+    layer_thickness = torch.diff(measured_depths, dim=0, prepend=torch.tensor([0.0], device=measured_depths.device))
+
+    # From the hypoxic mask and layer thickness, compute the thickness of the bottom hypoxic layer
+    bottom_hypoxic_thickness = torch.zeros_like(oxygen_data[0], device=oxygen_data.device)
+    for i in range(oxygen_data.shape[0]):
+        bottom_hypoxic_thickness += hypoxic_mask[i] * layer_thickness[i]
+
+
+    return bottom_hypoxic_thickness
+
+
+def oxygen_partial_pressure(
+        oxygen_data: Tensor,
+        salinity_data: Tensor,
+        temperature_data: Tensor,
+) -> Tensor:
+    """Compute the partial pressure of oxygen (pO2) from oxygen concentration.
+    Input:
+        oxygen_data: Tensor of shape (dep, lat, lon) representing oxygen concentration at different depths.
+        salinity_data: Tensor of shape (dep, lat, lon) representing salinity at different depths.
+        temperature_data: Tensor of shape (dep, lat, lon) representing temperature at different depths.
+
+    Output:
+        Tensor of shape (dep, lat, lon) representing the partial pressure of oxygen.
+
+    """
+
+    # compute Henry's Law constant from temperature and salinity
+    henry_constant = 0.0001 * (1 + 0.032 * salinity_data) * torch.exp(-0.02 * temperature_data)  ## varify this formula
+
+    po2 = oxygen_data / henry_constant
+
+    return po2
+
+
+def oxygen_saturation(
+        temperature_data: Tensor,
+        salinity_data: Tensor,
+        pressure_data: Tensor
+) -> Tensor:
+    """Compute the oxygen saturation from oxygen concentration.
+    Input:
+        temperature_data: Tensor of shape (dep, lat, lon) representing temperature at different depths.
+        salinity_data: Tensor of shape (dep, lat, lon) representing salinity at different depths.
+        pressure_data: Tensor of shape (dep, lat, lon) representing pressure at different depths.
+    Output:
+        Tensor of shape (dep, lat, lon) representing the oxygen saturation.
+    """
+
+    ## to check
+    o2_saturated = 14.6 * torch.exp(-0.02 * temperature_data) * (1 - 0.032 * salinity_data) * torch.exp(-0.0001 * pressure_data)  ## varify this formula
+
+    return o2_saturated
+
+
+def oxygen_solubility(
+        oxygen_data: Tensor,
+        temperature_data: Tensor,
+        salinity_data: Tensor,
+        pressure_data: Tensor
+) -> Tensor:
+    """Compute the oxygen solubility from oxygen concentration, temperature and salinity, and pressure.
+    Input:
+        oxygen_data: Tensor of shape (dep, lat, lon) representing oxygen concentration at different depths.
+        temperature_data: Tensor of shape (dep, lat, lon) representing temperature at different depths.
+        salinity_data: Tensor of shape (dep, lat, lon) representing salinity at different depths.
+        pressure_data: Tensor of shape (dep, lat, lon) representing pressure at different depths.
+    Output:
+        Tensor of shape (dep, lat, lon) representing the oxygen solubility.
+    """
+
+    o2_saturation = oxygen_saturation(temperature_data, salinity_data, pressure_data)
+    solubility = oxygen_data / o2_saturation
+    return solubility
+
+def apparent_oxygen_utilization(
+        oxygen_data: Tensor,
+        temperature_data: Tensor,
+        salinity_data: Tensor,
+        pressure_data: Tensor
+) -> Tensor:
+    """Compute the apparent oxygen utilization (AOU) from oxygen concentration.
+    Input:
+        oxygen_data: Tensor of shape (dep, lat, lon) representing oxygen concentration at different depths.
+        temperature_data: Tensor of shape (dep, lat, lon) representing temperature at different depths.
+        salinity_data: Tensor of shape (dep, lat, lon) representing salinity at different depths.
+        pressure_data: Tensor of shape (dep, lat, lon) representing pressure at different depths.
+    Output:
+        Tensor of shape (dep, lat, lon) representing the apparent oxygen utilization.
+    """
+
+    o2_saturation = oxygen_saturation(temperature_data, salinity_data, pressure_data)
+    aou = o2_saturation - oxygen_data
+    return aou
