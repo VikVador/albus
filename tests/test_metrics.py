@@ -46,6 +46,15 @@ def test_skill_perfect_ensemble() -> None:
     assert torch.allclose(s, torch.zeros(5), atol=1e-6)
 
 
+def test_skill_well_defined_for_single_member() -> None:
+    r"""Reduces to the RMSE of the single member for a deterministic (N = 1) forecast."""
+    x = torch.randn(3, 2)
+    y = torch.randn(3, 1, 2)
+    s = skill(x, y, dims="T N C", ensemble="N", reduce="C")
+    expected = (y.squeeze(1) - x).pow(2).mean(dim=-1).sqrt()
+    assert torch.allclose(s, expected, atol=1e-5)
+
+
 def test_spread_zero_when_ensemble_is_constant() -> None:
     r"""Is zero when the ensemble has no variability across its members."""
     y = torch.ones(2, 6, 3)  # no variability across the ensemble axis
@@ -59,6 +68,17 @@ def test_spread_matches_unbiased_torch_var() -> None:
     sp = spread(y, dims="T N C", ensemble="N", reduce="C")
     expected = y.var(dim=1, unbiased=True).mean(dim=-1).sqrt()
     assert torch.allclose(sp, expected, atol=1e-5)
+
+
+def test_spread_and_ratio_are_nan_for_single_member() -> None:
+    r"""Are NaN for a deterministic (N = 1) forecast, where dispersion is undefined."""
+    x = torch.randn(3, 2)
+    y = torch.randn(3, 1, 2)
+    sp = spread(y, dims="T N C", ensemble="N", reduce="C")
+    _, sp2, ratio = spread_skill_ratio(x, y, dims="T N C", ensemble="N", reduce="C")
+    assert torch.isnan(sp).all()
+    assert torch.isnan(sp2).all()
+    assert torch.isnan(ratio).all()
 
 
 def test_spread_skill_ratio_matches_individual_calls() -> None:
@@ -102,6 +122,15 @@ def test_crps_zero_for_perfect_constant_ensemble() -> None:
     y = x.unsqueeze(1).expand(3, 5, 2).clone()
     crps = continuous_ranked_probability_score(x, y, dims="T N C", ensemble="N", reduce="C")
     assert torch.allclose(crps, torch.zeros(3), atol=1e-6)
+
+
+def test_crps_equals_mae_for_single_member() -> None:
+    r"""Reduces to the MAE for a deterministic (N = 1) forecast, its exact mathematical limit."""
+    x = torch.randn(3, 2)
+    y = torch.randn(3, 1, 2)
+    crps = continuous_ranked_probability_score(x, y, dims="T N C", ensemble="N", reduce="C")
+    expected = (y.squeeze(1) - x).abs().mean(dim=-1)
+    assert torch.allclose(crps, expected, atol=1e-6)
 
 
 def _reference_power_spectrum(u: torch.Tensor) -> torch.Tensor:

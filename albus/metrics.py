@@ -146,6 +146,9 @@ def skill(
     Formula:
         Skill = √(𝔼[(x - 𝔼_N[y])²])
 
+    Deterministic Case:
+        Reduces to the RMSE of the single member against the truth.
+
     Arguments:
         x        : Ground truth tensor.
         y        : Ensemble tensor, broadcastable with `x` once `ensemble` is collapsed.
@@ -187,6 +190,9 @@ def spread(
     Formula:
         Spread = √(𝔼[ 1/(N - 1) · Σₙ (x_n - 𝔼_N[x])² ])
 
+    Deterministic Case:
+        Returns a NaN because dispersion is undefined for a single member.
+
     Arguments:
         x        : Ensemble tensor.
         dims     : Space-separated axis names describing the shape of `x`, e.g. "T N C Y X".
@@ -211,10 +217,11 @@ def spread(
     n            = x.shape[n_axis]
     x            = apply_mask(x, mask)
     mean         = x.nanmean(dim=n_axis, keepdim=True)
-    variance     = (x - mean).pow(2).nanmean(dim=n_axis) * (n / (n - 1))
+    correction   = 1.0 if n == 1 else n / (n - 1)
+    variance     = (x - mean).pow(2).nanmean(dim=n_axis) * correction
     spatial_axes = axes(drop(dims, ensemble), reduce)
     sprd         = variance.nanmean(dim=spatial_axes).sqrt()
-    return sprd
+    return torch.full_like(sprd, torch.nan) if n == 1 else sprd
 
 
 def spread_skill_ratio(
@@ -229,6 +236,9 @@ def spread_skill_ratio(
 
     Formula:
         Ratio = √((N + 1) / N) · Spread / Skill
+
+    Deterministic Case:
+        Ratio is a NaN because the spread is undefined for a single member.
 
     Arguments:
         x        : Ground truth tensor.
@@ -278,6 +288,9 @@ def continuous_ranked_probability_score(
 
     where yᵢ, yⱼ range over the ensemble members along `ensemble`.
 
+    Deterministic Case:
+        Reduces to the MAE which is its exact mathematical limit for a point forecast.
+
     Arguments:
         x        : Ground truth tensor.
         y        : Ensemble tensor, broadcastable with `x` once `ensemble` is collapsed.
@@ -310,7 +323,8 @@ def continuous_ranked_probability_score(
     rank_shape         = [1] * y.dim()
     rank_shape[n_axis] = n
     rank               = torch.arange(1, n + 1, dtype=y.dtype, device=y.device).view(rank_shape)
-    spread_term        = ((2 * rank - n - 1) * y_sorted).sum(dim=n_axis) / (n * (n - 1))
+    denom              = 1.0 if n == 1 else n * (n - 1)
+    spread_term        = ((2 * rank - n - 1) * y_sorted).sum(dim=n_axis) / denom
     crps               = mae - spread_term
     spatial_axes       = axes(drop(dims, ensemble), reduce)
     crps               = crps.nanmean(dim=spatial_axes)
