@@ -1,5 +1,6 @@
 r"""Tests for albus.ocean.oxygen."""
 
+import pytest
 import torch
 
 from albus.ocean.oxygen import hypoxia
@@ -30,6 +31,13 @@ def test_hypoxia_ignores_masked_entries() -> None:
     mask = torch.tensor([1, 0, 1, 1])
     out = hypoxia(x=x, y=y, dims="T N", reduce="N", thresholds=[63.0, 63.0], mask=mask)
     assert torch.allclose(out["accuracy"], torch.ones(1))
+
+
+def test_hypoxia_rejects_empty_reduce() -> None:
+    r"""Raises an error when `reduce` is empty, as a pointwise score is meaningless."""
+    x = torch.rand(2, 50) * 400
+    with pytest.raises(ValueError):
+        hypoxia(x=x, y=x.clone(), dims="T N", reduce="", thresholds=[63.0, 63.0])
 
 
 def test_hypoxia_curve_shapes_and_auc_range() -> None:
