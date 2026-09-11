@@ -46,6 +46,15 @@ def test_skill_perfect_ensemble() -> None:
     assert torch.allclose(s, torch.zeros(5), atol=1e-6)
 
 
+def test_skill_well_defined_for_single_member() -> None:
+    r"""Reduces to the RMSE of the single member for a deterministic (N = 1) forecast."""
+    x = torch.randn(3, 2)
+    y = torch.randn(3, 1, 2)
+    s = skill(x, y, dims="T N C", ensemble="N", reduce="C")
+    expected = (y.squeeze(1) - x).pow(2).mean(dim=-1).sqrt()
+    assert torch.allclose(s, expected, atol=1e-5)
+
+
 def test_spread_zero_when_ensemble_is_constant() -> None:
     r"""Is zero when the ensemble has no variability across its members."""
     y = torch.ones(2, 6, 3)  # no variability across the ensemble axis
@@ -59,6 +68,17 @@ def test_spread_matches_unbiased_torch_var() -> None:
     sp = spread(y, dims="T N C", ensemble="N", reduce="C")
     expected = y.var(dim=1, unbiased=True).mean(dim=-1).sqrt()
     assert torch.allclose(sp, expected, atol=1e-5)
+
+
+def test_spread_and_ratio_are_nan_for_single_member() -> None:
+    r"""Are NaN for a deterministic (N = 1) forecast, where dispersion is undefined."""
+    x = torch.randn(3, 2)
+    y = torch.randn(3, 1, 2)
+    sp = spread(y, dims="T N C", ensemble="N", reduce="C")
+    _, sp2, ratio = spread_skill_ratio(x, y, dims="T N C", ensemble="N", reduce="C")
+    assert torch.isnan(sp).all()
+    assert torch.isnan(sp2).all()
+    assert torch.isnan(ratio).all()
 
 
 def test_spread_skill_ratio_matches_individual_calls() -> None:
@@ -102,6 +122,51 @@ def test_crps_zero_for_perfect_constant_ensemble() -> None:
     y = x.unsqueeze(1).expand(3, 5, 2).clone()
     crps = continuous_ranked_probability_score(x, y, dims="T N C", ensemble="N", reduce="C")
     assert torch.allclose(crps, torch.zeros(3), atol=1e-6)
+
+
+def test_crps_equals_mae_for_single_member() -> None:
+    r"""Reduces to the MAE for a deterministic (N = 1) forecast, its exact mathematical limit."""
+    x = torch.randn(3, 2)
+    y = torch.randn(3, 1, 2)
+    crps = continuous_ranked_probability_score(x, y, dims="T N C", ensemble="N", reduce="C")
+    expected = (y.squeeze(1) - x).abs().mean(dim=-1)
+    assert torch.allclose(crps, expected, atol=1e-6)
+
+
+def test_empty_reduce_gives_pointwise_values() -> None:
+    r"""Keeps every non-ensemble axis when `reduce` is empty, instead of reducing them all."""
+    x = torch.randn(3, 2, 4, 5)
+    y = torch.randn(3, 6, 2, 4, 5)
+    assert mean_square_error(x, x, dims="T C Y X", reduce="").shape == x.shape
+    assert standard_deviation(x, dims="T C Y X", reduce="").shape == x.shape
+    for metric in (skill, continuous_ranked_probability_score):
+        assert metric(x, y, dims="T N C Y X", ensemble="N", reduce="").shape == x.shape
+    assert spread(y, dims="T N C Y X", ensemble="N", reduce="").shape == x.shape
+
+
+def test_pointwise_values_average_to_reduced_values() -> None:
+    r"""Averages, over the masked field, to the value obtained by reducing directly."""
+    torch.manual_seed(0)
+    x = torch.randn(3, 2, 4, 5)
+    y = torch.randn(3, 6, 2, 4, 5)
+    mask = torch.rand(4, 5) > 0.3
+    kwargs = dict(dims="T N C Y X", ensemble="N", mask=mask)
+    crps = continuous_ranked_probability_score(x, y, reduce="", **kwargs)
+    expected = continuous_ranked_probability_score(x, y, reduce="Y X", **kwargs)
+    assert torch.isnan(crps[..., ~mask]).all()
+    assert torch.allclose(crps.nanmean(dim=(-2, -1)), expected, atol=1e-6)
+
+
+def test_ensemble_metrics_accept_mask_with_ensemble_axis() -> None:
+    r"""Gives the same result with a mask carrying a singleton ensemble axis as without it."""
+    torch.manual_seed(0)
+    x = torch.randn(3, 2, 4, 5)
+    y = torch.randn(3, 6, 2, 4, 5)
+    mask = torch.rand(4, 5) > 0.3
+    kwargs = dict(dims="T N C Y X", ensemble="N", reduce="Y X")
+    for metric in (skill, continuous_ranked_probability_score):
+        out = metric(x, y, mask=mask[None, None, None], **kwargs)
+        assert torch.allclose(out, metric(x, y, mask=mask, **kwargs), atol=1e-6)
 
 
 def _reference_power_spectrum(u: torch.Tensor) -> torch.Tensor:
@@ -149,3 +214,22 @@ def test_power_spectrum_detrend_is_robust_to_offset() -> None:
     spectrum = power_spectrum(u, dims="B C Y X", spatial="Y X", mask=mask)
     spectrum_offset = power_spectrum(u + 1000.0, dims="B C Y X", spatial="Y X", mask=mask)
     assert torch.allclose(spectrum, spectrum_offset, atol=1e-2)
+
+
+def test_power_spectrum_mask_is_axis_order_invariant() -> None:
+    r"""Gives the same spectrum when the field and its mask are both transposed."""
+    torch.manual_seed(0)
+    u = torch.randn(2, 3, 16, 20)
+    mask = torch.rand(16, 20) > 0.2
+    spectrum = power_spectrum(u, dims="B C Y X", spatial="Y X", mask=mask)
+    spectrum_t = power_spectrum(u.mT, dims="B C X Y", spatial="Y X", mask=mask.mT)
+    assert torch.allclose(spectrum, spectrum_t, atol=1e-4)
+
+
+def test_power_spectrum_supports_double_precision() -> None:
+    r"""Works on float64 fields and keeps their precision."""
+    u = torch.randn(2, 16, 20, dtype=torch.float64)
+    spectrum = power_spectrum(u, dims="C Y X", spatial="Y X")
+    assert spectrum.dtype == torch.float64
+    expected = power_spectrum(u.float(), dims="C Y X", spatial="Y X")
+    assert torch.allclose(spectrum.float(), expected, atol=1e-4)

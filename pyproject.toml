@@ -24,7 +24,7 @@ all = [
 
 [tool.ruff]
 line-length = 99
-exclude = ["notebooks/"]
+exclude = ["notebook/"]
 
 [tool.ruff.lint]
 extend-select = ["ANN", "B", "I", "UP", "W"]
